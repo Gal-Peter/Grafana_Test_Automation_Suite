@@ -1,0 +1,34 @@
+// Jenkins alternative to GitHub Actions. In the job, set "Script Path" to workflows/Jenkinsfile.
+// Needs an agent with Docker. AI is OFF by default (AI_PROVIDER=none) so nothing can be billed.
+// For free AI use AI_PROVIDER=ollama (Ollama on the agent) - see README "Staying on the free tier".
+pipeline {
+  agent any
+  options { timeout(time: 45, unit: 'MINUTES'); timestamps() }
+  triggers { cron('H 5 * * 1-5') }            // weekdays around 05:00
+  parameters {
+    string(name: 'BASE_URL', defaultValue: 'http://host.docker.internal:3000', description: 'Grafana URL reachable from Docker')
+    string(name: 'PYTEST_ARGS', defaultValue: '-m "not mobile and not ai"', description: 'pytest arguments')
+    choice(name: 'AI_PROVIDER', choices: ['none', 'ollama'], description: 'none = no AI calls')
+  }
+  stages {
+    stage('Build image') { steps { sh 'docker build -t grafana-tests:jenkins .' } }
+    stage('Run tests') {
+      steps {
+        sh '''
+          mkdir -p allure-results logs traces videos
+          docker run --rm --add-host=host.docker.internal:host-gateway \
+            -e BASE_URL -e PYTEST_ARGS -e AI_PROVIDER \
+            -v "$WORKSPACE/allure-results:/app/allure-results" -v "$WORKSPACE/logs:/app/logs" \
+            -v "$WORKSPACE/traces:/app/traces" -v "$WORKSPACE/videos:/app/videos" \
+            grafana-tests:jenkins
+        '''
+      }
+    }
+  }
+  post {
+    always {
+      archiveArtifacts artifacts: 'allure-results/**, logs/**, traces/**, videos/**', allowEmptyArchive: true
+      // Optional (needs the Allure Jenkins plugin):  allure results: [[path: 'allure-results']]
+    }
+  }
+}

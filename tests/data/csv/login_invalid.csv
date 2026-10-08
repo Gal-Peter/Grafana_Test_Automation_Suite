@@ -1,0 +1,5 @@
+id,username,password,expected_error
+wrong_password,admin,definitely-wrong,Invalid username or password
+unknown_user,no-such-user-xyz,whatever123,Invalid username or password
+empty_password,admin,,Password is required
+empty_username,,whatever123,Email or username is required

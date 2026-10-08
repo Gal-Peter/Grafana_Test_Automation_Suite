@@ -1,0 +1,39 @@
+{
+  "grafana": {
+    "base_url": "http://localhost:3000",
+    "username": "admin",
+    "password": "admin",
+    "testdata_type": "grafana-testdata-datasource",
+    "startup_wait_seconds": 10
+  },
+  "playwright": {
+    "default_timeout_ms": 15000,
+    "trace": "retain-on-failure",
+    "video": "retain-on-failure"
+  },
+  "paths": {
+    "allure_results": "allure-results",
+    "traces": "traces",
+    "videos": "videos",
+    "logs": "logs",
+    "ai_report": "logs/ai_report.html",
+    "test_data": "tests/data",
+    "sqlite_db": "tests/data/test_data.db"
+  },
+  "ai": {
+    "provider": "none",
+    "model": "",
+    "base_url": "",
+    "max_calls": 10,
+    "failure_analysis": false,
+    "report_analysis": true
+  },
+  "mobile": {
+    "appium_url": "http://127.0.0.1:4723",
+    "platform": "android",
+    "device": "Android Emulator",
+    "platform_version": "",
+    "udid": "",
+    "base_url": ""
+  }
+}

@@ -1,0 +1,163 @@
+name: grafana-tests
+
+on:
+  schedule:
+    - cron: "0 5 * * 1-5"        # every weekday at 05:00 UTC
+  workflow_dispatch:             # manual run from the Actions tab
+    inputs:
+      pytest_args:
+        description: "pytest arguments"
+        default: '-m "not mobile and not ai"'
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+  models: read                   # lets GITHUB_TOKEN call GitHub Models (free tier) for the AI analysis
+
+concurrency:
+  group: grafana-tests-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  AI_PROVIDER: github            # free tier. Set to "none" to disable AI completely.
+  AI_MAX_CALLS: "10"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    services:
+      grafana:
+        image: grafana/grafana:13.2.2
+        ports: ["3000:3000"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build test image (layer-cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: grafana-tests:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Wait for Grafana
+        run: curl --retry 40 --retry-delay 3 --retry-connrefused -fsS http://localhost:3000/api/health
+
+      - name: Run tests in the container
+        env:
+          PYTEST_BASE_ARGS: ${{ inputs.pytest_args || '-m "not mobile and not ai"' }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # AI triage of failures on ONE browser only, to stay inside the free rate limits
+          AI_FAILURE_ANALYSIS: ${{ matrix.browser == 'chromium' && 'true' || 'false' }}
+        run: |
+          mkdir -p allure-results logs traces videos
+          docker run --rm --network host \
+            -e BASE_URL=http://localhost:3000 \
+            -e AI_PROVIDER -e AI_MAX_CALLS -e AI_FAILURE_ANALYSIS -e GITHUB_TOKEN \
+            -e "PYTEST_ARGS=$PYTEST_BASE_ARGS --browser ${{ matrix.browser }}" \
+            -v "$PWD/allure-results:/app/allure-results" \
+            -v "$PWD/logs:/app/logs" \
+            -v "$PWD/traces:/app/traces" \
+            -v "$PWD/videos:/app/videos" \
+            grafana-tests:ci
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.browser }}
+          path: |
+            allure-results
+            logs
+            traces
+            videos
+          if-no-files-found: ignore
+          retention-days: 7
+
+  ai-tests:
+    name: AI exploratory tests
+    if: github.event_name != 'pull_request'     # fork PRs get a restricted token
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      grafana:
+        image: grafana/grafana:13.2.2
+        ports: ["3000:3000"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - name: Build test image (layer-cached)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: grafana-tests:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Wait for Grafana
+        run: curl --retry 40 --retry-delay 3 --retry-connrefused -fsS http://localhost:3000/api/health
+      - name: Run AI tests in the container
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p allure-results logs traces videos
+          docker run --rm --network host \
+            -e BASE_URL=http://localhost:3000 \
+            -e AI_PROVIDER -e AI_MAX_CALLS -e GITHUB_TOKEN \
+            -e "PYTEST_ARGS=-m ai --browser chromium" \
+            -v "$PWD/allure-results:/app/allure-results" \
+            -v "$PWD/logs:/app/logs" \
+            -v "$PWD/traces:/app/traces" \
+            -v "$PWD/videos:/app/videos" \
+            grafana-tests:ci
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: results-ai
+          path: |
+            allure-results
+            logs
+            traces
+            videos
+          if-no-files-found: ignore
+          retention-days: 7
+
+  report:
+    name: combined AI report
+    needs: [test, ai-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests python-dotenv
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: merged
+          merge-multiple: true
+      - name: Generate AI report from all browsers
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python -m ai.generate_report --results merged/allure-results --output ai_report.html \
+            && echo "AI report generated: download the **ai-report** artifact." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ai-report
+          path: ai_report.html
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,13 @@
+.git
+.github
+.venv
+.env
+__pycache__
+*.pyc
+allure-results
+allure-report
+traces
+videos
+logs
+*.zip
+tests/data/*.db

@@ -1,0 +1,67 @@
+# DEFAULT run (desktop browsers only):   docker compose up --build --abort-on-container-exit
+# MOBILE run (needs host Appium+emulator): docker compose --profile mobile run --rm mobile-tests
+# AI run (free providers; set AI_PROVIDER in .env): docker compose --profile ai run --rm ai-tests
+#
+# Results land in ./allure-results ./logs ./traces ./videos
+#
+# Using YOUR local Grafana instead of the bundled one (stop the bundled one from clashing on port 3000):
+#   docker compose run --rm --no-deps -e BASE_URL=http://host.docker.internal:3000 tests
+
+x-test-env: &test-env
+  BASE_URL: http://grafana:3000
+  GRAFANA_WAIT_SECONDS: "120"          # Grafana needs a moment to boot; the suite polls /api/health
+  AI_PROVIDER: ${AI_PROVIDER:-none}          # none = no AI calls, no cost. Free options: github | ollama
+  AI_MODEL: ${AI_MODEL:-}
+  AI_BASE_URL: ${AI_BASE_URL:-}
+  GITHUB_TOKEN: ${GITHUB_TOKEN:-}            # for AI_PROVIDER=github (token with the Models permission)
+  ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}  # PAID provider; leave empty to stay free
+  AI_FAILURE_ANALYSIS: ${AI_FAILURE_ANALYSIS:-false}
+
+x-test-volumes: &test-volumes
+  - ./allure-results:/app/allure-results
+  - ./logs:/app/logs
+  - ./traces:/app/traces
+  - ./videos:/app/videos
+
+services:
+  grafana:
+    image: grafana/grafana:13.2.2
+    ports:
+      - "3000:3000"        # published on the host, so the emulator can reach it at http://10.0.2.2:3000
+
+  tests:
+    build: .
+    depends_on: [grafana]
+    environment:
+      <<: *test-env
+      PYTEST_ARGS: ${PYTEST_ARGS:--m "not mobile and not ai"}
+    volumes: *test-volumes
+
+  mobile-tests:
+    profiles: ["mobile"]
+    build: .
+    depends_on: [grafana]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"     # Docker Desktop (Windows/Mac) already provides this
+    environment:
+      <<: *test-env
+      PYTEST_ARGS: -m mobile
+      REQUIRE_MOBILE: "1"                       # fail loudly if Appium isn't reachable (don't silently skip)
+      APPIUM_URL: http://host.docker.internal:4723
+      MOBILE_BASE_URL: http://10.0.2.2:3000     # how the EMULATOR sees your machine
+      MOBILE_DEVICE: ${MOBILE_DEVICE:-Android Emulator}
+      MOBILE_UDID: ${MOBILE_UDID:-}
+    volumes: *test-volumes
+
+  ai-tests:
+    profiles: ["ai"]
+    build: .
+    depends_on: [grafana]
+    extra_hosts:
+      - "host.docker.internal:host-gateway"     # lets the container reach Ollama running on your machine
+    environment:
+      <<: *test-env
+      REQUIRE_AI: "1"          # fail with a clear message (instead of skipping) if no AI provider is configured
+      AI_FAILURE_ANALYSIS: "true"
+      PYTEST_ARGS: -m ai
+    volumes: *test-volumes

@@ -1,0 +1,79 @@
+"""Facade over the Grafana HTTP API. Used for fast test setup/teardown and API tests."""
+from __future__ import annotations
+
+import time
+
+import allure
+import requests
+
+
+class GrafanaApiError(Exception):
+    pass
+
+
+class GrafanaClient:
+    def __init__(self, base_url: str, username: str, password: str, testdata_type: str, timeout: int = 15):
+        self.base_url = base_url.rstrip("/")
+        self.testdata_type = testdata_type
+        self._timeout = timeout
+        self._session = requests.Session()
+        self._session.auth = (username, password)
+
+    # -- low level -------------------------------------------------------
+    def request(self, method: str, path: str, authenticated: bool = True, **kwargs) -> requests.Response:
+        """Returns the raw response (no raising) so API tests can assert on any status."""
+        url = f"{self.base_url}{path}"
+        with allure.step(f"API {method} {path}"):
+            if authenticated:
+                return self._session.request(method, url, timeout=self._timeout, **kwargs)
+            return requests.request(method, url, timeout=self._timeout, **kwargs)
+
+    def _ok(self, response: requests.Response, action: str) -> dict:
+        if not response.ok:
+            raise GrafanaApiError(f"{action} failed: {response.status_code} {response.text[:300]}")
+        return response.json() if response.content else {}
+
+    # -- health ----------------------------------------------------------
+    def health(self) -> dict:
+        return self._ok(self.request("GET", "/api/health", authenticated=False), "health")
+
+    def wait_until_healthy(self, timeout_s: int = 0) -> dict:
+        """Poll /api/health; with timeout 0 it tries once. Handy for Docker/CI where Grafana boots slowly."""
+        deadline = time.monotonic() + timeout_s
+        while True:
+            try:
+                return self.health()
+            except (requests.RequestException, GrafanaApiError):
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(2)
+
+    # -- folders ---------------------------------------------------------
+    def create_folder(self, title: str, uid: str | None = None) -> dict:
+        body = {"title": title, **({"uid": uid} if uid else {})}
+        return self._ok(self.request("POST", "/api/folders", json=body), "create folder")
+
+    def delete_folder(self, uid: str) -> None:
+        self.request("DELETE", f"/api/folders/{uid}", params={"forceDeleteRules": "true"})
+
+    # -- dashboards ------------------------------------------------------
+    def create_dashboard(self, payload: dict) -> dict:
+        return self._ok(self.request("POST", "/api/dashboards/db", json=payload), "create dashboard")
+
+    def get_dashboard(self, uid: str) -> requests.Response:
+        return self.request("GET", f"/api/dashboards/uid/{uid}")
+
+    def delete_dashboard(self, uid: str) -> None:
+        self.request("DELETE", f"/api/dashboards/uid/{uid}")
+
+    def search(self, query: str = "", **params) -> list[dict]:
+        return self._ok(self.request("GET", "/api/search", params={"query": query, **params}), "search")
+
+    # -- data sources ----------------------------------------------------
+    def create_testdata_datasource(self, name: str) -> dict:
+        body = {"name": name, "type": self.testdata_type, "access": "proxy"}
+        result = self._ok(self.request("POST", "/api/datasources", json=body), "create datasource")
+        return result["datasource"]
+
+    def delete_datasource(self, uid: str) -> None:
+        self.request("DELETE", f"/api/datasources/uid/{uid}")
