@@ -107,6 +107,21 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Wait for Grafana
         run: curl --retry 40 --retry-delay 3 --retry-connrefused -fsS http://localhost:3000/api/health
+      - name: Diagnose AI endpoint (prints status and headers; the token is never printed)
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          curl -sS -i -m 60 -X POST https://models.github.ai/inference/chat/completions \
+            -H "Authorization: Bearer $GITHUB_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            -H "Content-Type: application/json" \
+            -d '{"model":"openai/gpt-4.1-mini","messages":[{"role":"user","content":"Reply with the word OK"}],"max_tokens":10}' \
+            | head -c 2000
+          echo
+          echo "--- model catalog (first ids) ---"
+          curl -sS -m 60 https://models.github.ai/catalog/models -H "Authorization: Bearer $GITHUB_TOKEN" | head -c 600
       - name: Run AI tests in the container
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -150,15 +165,20 @@ jobs:
           pattern: results-*
           path: merged
           merge-multiple: true
+      - name: Show what was downloaded
+        run: |
+          echo "result files: $(find merged -name '*-result.json' | wc -l)"
+          find merged -maxdepth 2 | head -30
       - name: Generate AI report from all browsers
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          python -m ai.generate_report --results merged/allure-results --output ai_report.html \
-            && echo "AI report generated: download the **ai-report** artifact." >> "$GITHUB_STEP_SUMMARY"
+          python -m ai.generate_report --results merged/allure-results --output ai_report.html
+          ls -la ai_report.html
+          echo "AI report generated: download the **ai-report** artifact at the bottom of this page." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: ai-report
           path: ai_report.html
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 14
