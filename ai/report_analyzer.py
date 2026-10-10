@@ -248,7 +248,7 @@ def ai_enrich(summary: dict, base: dict, settings: Settings) -> dict:
             merged["improvements"] = imps
         return merged
     except Exception as exc:
-        base["note"] = f"AI analysis unavailable ({type(exc).__name__}); showing rule-based analysis."
+        base["note"] = f"AI analysis unavailable ({type(exc).__name__}: {str(exc)[:160]}); showing rule-based analysis."
         return base
 
 

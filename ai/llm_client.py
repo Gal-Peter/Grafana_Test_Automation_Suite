@@ -20,10 +20,15 @@ from utils.settings import Settings
 _calls_made = 0
 
 
+class LLMUnavailable(RuntimeError):
+    """The AI provider could not give a usable answer (network, rate limit, unexpected reply).
+    This is an infrastructure problem, not a product defect, so callers skip or fall back instead of failing."""
+
+
 def _spend(limit: int) -> None:
     global _calls_made
     if _calls_made >= limit:
-        raise RuntimeError(f"AI call budget reached ({limit} calls). Raise AI_MAX_CALLS if that is intended.")
+        raise LLMUnavailable(f"AI call budget reached ({limit} calls). Raise AI_MAX_CALLS if that is intended.")
     _calls_made += 1
 
 
@@ -84,13 +89,25 @@ class OpenAICompatLLM(BaseLLM):
         if tools:
             payload["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                                                                    "parameters": t["input_schema"]}} for t in tools]
-        headers = {"Content-Type": "application/json"}
+        headers = {"Content-Type": "application/json", "Accept": "application/json"}
+        if self.name == "github":  # headers GitHub documents for the Models inference REST endpoint
+            headers.update({"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
         if self._key:
             headers["Authorization"] = f"Bearer {self._key}"
-        resp = requests.post(self._url, headers=headers, json=payload, timeout=180)
+        try:
+            resp = requests.post(self._url, headers=headers, json=payload, timeout=180)
+        except requests.RequestException as exc:
+            raise LLMUnavailable(f"{self.name} request failed: {type(exc).__name__}: {exc}") from exc
         if resp.status_code >= 400:
-            raise RuntimeError(f"{self.name} API error {resp.status_code}: {resp.text[:300]}")
-        message = resp.json()["choices"][0]["message"]
+            raise LLMUnavailable(f"{self.name} API error {resp.status_code}: {resp.text[:300]}")
+        try:
+            message = resp.json()["choices"][0]["message"]
+        except (ValueError, KeyError, IndexError, TypeError) as exc:
+            info = getattr(resp, "headers", {}) or {}
+            raise LLMUnavailable(
+                f"{self.name} returned an unusable reply (HTTP {resp.status_code}, "
+                f"content-type={info.get('content-type')!r}, encoding={info.get('content-encoding')!r}): "
+                f"{resp.text[:300]!r}") from exc
         calls = []
         for tc in message.get("tool_calls") or []:
             try:
@@ -126,7 +143,10 @@ class AnthropicLLM(BaseLLM):
         kwargs = {"model": self.model, "max_tokens": max_tokens, "system": system, "messages": messages}
         if tools:
             kwargs["tools"] = tools
-        resp = self._client.messages.create(**kwargs)
+        try:
+            resp = self._client.messages.create(**kwargs)
+        except Exception as exc:  # SDK/network/rate-limit errors are provider problems, not test findings
+            raise LLMUnavailable(f"anthropic request failed: {type(exc).__name__}: {exc}") from exc
         text = "".join(b.text for b in resp.content if b.type == "text")
         calls = [ToolCall(b.id, b.name, dict(b.input)) for b in resp.content if b.type == "tool_use"]
         return ChatTurn(text=text, tool_calls=calls, raw=resp.content)

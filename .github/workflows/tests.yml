@@ -87,6 +87,7 @@ jobs:
   ai-tests:
     name: AI exploratory tests
     if: github.event_name != 'pull_request'     # fork PRs get a restricted token
+    continue-on-error: true                     # free-tier AI is best-effort: never fail the pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:

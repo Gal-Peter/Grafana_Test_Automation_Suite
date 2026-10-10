@@ -4,7 +4,7 @@ import allure
 import pytest
 
 from ai.exploratory_agent import ExploratoryAgent
-from ai.llm_client import get_llm_client
+from ai.llm_client import LLMUnavailable, get_llm_client
 
 
 @allure.epic("Grafana")
@@ -23,7 +23,13 @@ def test_ai_exploration_finds_no_critical_issues(mission, page, settings):
         pytest.skip(message)
 
     page.goto("/")
-    report = ExploratoryAgent(client, page).run(mission)
+    try:
+        report = ExploratoryAgent(client, page).run(mission)
+    except LLMUnavailable as exc:
+        message = f"AI provider unavailable, so no exploration took place: {exc}"
+        if os.getenv("REQUIRE_AI"):
+            pytest.fail(message, pytrace=False)
+        pytest.skip(message)
     allure.attach(report.to_markdown(), name="Exploratory report", attachment_type=allure.attachment_type.TEXT)
 
     serious = [i for i in report.issues if i["severity"] in {"high", "critical"}]

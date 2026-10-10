@@ -76,3 +76,24 @@ def test_http_errors_surface_clearly(monkeypatch):
     client = llm.get_llm_client(_settings(ai_provider="github", ai_api_key="t", ai_base_url="http://x"))
     with pytest.raises(RuntimeError, match="429"):
         client.complete("s", "p")
+
+
+def test_unreadable_reply_is_reported_with_diagnostics(monkeypatch):
+    class Garbage:
+        status_code, text, headers = 200, "<html>nope</html>", {"content-type": "text/html"}
+
+        def json(self):
+            raise ValueError("not json")
+
+    monkeypatch.setattr(llm.requests, "post", lambda *a, **k: Garbage())
+    client = llm.get_llm_client(_settings(ai_provider="github", ai_api_key="t", ai_base_url="http://x"))
+    with pytest.raises(llm.LLMUnavailable, match="text/html"):
+        client.complete("s", "p")
+
+
+def test_github_requests_carry_the_documented_headers(monkeypatch):
+    sent = {}
+    monkeypatch.setattr(llm.requests, "post",
+                        lambda url, **kw: (sent.update(kw), FakeResponse({"choices": [{"message": {"content": "x"}}]}))[1])
+    llm.get_llm_client(_settings(ai_provider="github", ai_api_key="t", ai_base_url="http://x")).complete("s", "p")
+    assert sent["headers"]["X-GitHub-Api-Version"] == "2022-11-28"
