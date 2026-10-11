@@ -93,7 +93,7 @@ With several devices connected set `MOBILE_UDID`. If Appium is unreachable this 
 
 ### AI tests in Docker
 ```powershell
-# in .env:  AI_PROVIDER=github  +  GITHUB_TOKEN=...      (or AI_PROVIDER=ollama, see below)
+# in .env:  AI_PROVIDER=ollama      (needs Ollama running on your PC, see below)
 docker compose --profile ai run --rm ai-tests
 ```
 Set `AI_FAILURE_ANALYSIS=true` in `.env` for AI root-cause notes on failed UI tests during normal runs.
@@ -104,14 +104,15 @@ rule-based analysis. To switch AI on at zero cost choose one provider:
 
 | Provider | Cost | Setup |
 |---|---|---|
-| `github` | Free tier (rate-limited per model/day) | In Actions it uses the built-in `GITHUB_TOKEN`, no secret needed. Locally put a personal access token with the Models permission in `.env` as `GITHUB_TOKEN`. |
-| `ollama` | Free, runs on your PC | Install Ollama, `ollama pull llama3.1:8b` (about 8 GB RAM). Docker containers reach it automatically via `host.docker.internal`. |
+| `ollama` | Free, runs on your PC | Install Ollama, `ollama pull llama3.1:8b` (about 8 GB RAM). Docker containers reach it automatically via `host.docker.internal`. Not usable in GitHub Actions. |
+| `custom` | Depends on the service (check its free tier) | Any OpenAI-compatible endpoint: set `AI_BASE_URL` (ending in `/v1`), `AI_MODEL`, and `AI_API_KEY` if it needs one. |
 | `anthropic` | **Paid, pay-as-you-go** | Only if you set `AI_PROVIDER=anthropic` and an API key. Not needed for anything in this project. |
 
-Safeguards: `AI_MAX_CALLS` (default 10) caps AI calls per process; do **not** enable paid inference in your GitHub Models
-settings (it is opt-in, free usage never converts to paid on its own). Small local models write weaker analysis and may return
+> **GitHub Models was retired on 30 July 2026**, so `AI_PROVIDER=github` is no longer supported (the project rejects it with a clear message).
+
+Safeguards: `AI_MAX_CALLS` (default 10) caps AI calls per process. Small local models write weaker analysis and may return
 invalid JSON; the report then falls back to rule-based text. Failure details (messages, page structure) are sent to the provider
-you choose; with `ollama` they never leave your machine.
+you choose; with `ollama` they never leave your machine. Check `python -m ai.check` to test any provider with one tiny call.
 
 Other costs, all free for a course project: Grafana OSS, Playwright, Appium, Android Studio, Allure, Docker Desktop (personal/education use).
 GitHub Actions: free for public repositories; private repositories get a monthly allowance of minutes and artifact storage
@@ -121,7 +122,8 @@ GitHub Actions: free for public repositories; private repositories get a monthly
 **GitHub Actions** (`.github/workflows/tests.yml`): runs on a **weekday 05:00 UTC schedule**, on push/PR, and manually
 (Actions tab -> Run workflow). It starts Grafana 13.2.2 as a service, builds the Docker image (cached), runs the suite on
 chromium / firefox / webkit (plus an `ai-tests` job), uploads results, then a `report` job merges all browsers into one `ai-report` artifact.
-AI analysis in CI uses **GitHub Models** (free tier) with the built-in `GITHUB_TOKEN`, no secret to create.
+AI in CI is **off by default** (the report uses rule-based analysis). To enable it, add repository *variables* `AI_PROVIDER` (`custom` or `anthropic`),
+`AI_BASE_URL`/`AI_MODEL` (for `custom`) and a *secret* `AI_API_KEY`; the `ai-tests` job then runs automatically.
 Change the schedule by editing the `cron:` line. **Jenkins**: `workflows/Jenkinsfile` (cron trigger included).
 
 ## Design patterns
@@ -132,3 +134,12 @@ Dependency Injection (fixtures), Unit of Work (cleanup stack), Decorator (`@step
 * Selectors are written for Grafana 13.x conventions and need verifying against your instance; run
   `python -m utils.inspect_page` to see the real ones, then fix them in `page_objects/` only.
 * Appium (Android emulator) setup is unchanged; run `pytest -m mobile` with the Appium server up.
+
+
+## Users, permissions and CRUD tests
+
+- `tests/api/test_users_permissions.py` - role matrix (Viewer / Editor / org Admin) driven by `tests/data/csv/role_permissions.csv`; users are created through the admin API and deleted automatically.
+- `tests/api/test_folders_datasources.py` - folder, data source and dashboard-update lifecycles, search by tag.
+- `tests/ui/test_viewer_access.py` - logs in through the real form as a Viewer.
+
+Run only these: `pytest tests/api/test_users_permissions.py tests/api/test_folders_datasources.py tests/ui/test_viewer_access.py -v`

@@ -19,7 +19,7 @@ def analyze_failure(settings: Settings, *, test_id: str, error_text: str, url: s
         client = get_llm_client(settings)
         if client is None:
             return (f"AI analysis skipped: provider '{settings.ai_provider}' is not usable "
-                    "(set AI_PROVIDER=github|ollama|anthropic and its credentials).")
+                    "(set AI_PROVIDER=ollama, custom or anthropic and its settings; see README).")
         prompt = (
             f"Test: {test_id}\nURL at failure: {url}\n\n"
             f"Error:\n{error_text[-3500:]}\n\n"

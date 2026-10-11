@@ -16,7 +16,7 @@ from ai.llm_client import LLMUnavailable, get_llm_client
 def test_ai_exploration_finds_no_critical_issues(mission, page, settings):
     client = get_llm_client(settings)
     if client is None:
-        message = ("AI provider not configured. Set AI_PROVIDER=github (with GITHUB_TOKEN) or AI_PROVIDER=ollama "
+        message = ("AI provider not configured. Set AI_PROVIDER=ollama (local, free) or custom/anthropic "
                    "in .env; see README 'Staying on the free tier'.")
         if os.getenv("REQUIRE_AI"):  # set by the docker compose ai-tests service
             pytest.fail(message, pytrace=False)

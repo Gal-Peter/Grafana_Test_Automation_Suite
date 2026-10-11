@@ -1,0 +1,13 @@
+id,role,action,expected_status
+viewer_can_view_dashboard,Viewer,view_dashboard,200
+viewer_cannot_create_dashboard,Viewer,create_dashboard,403
+viewer_cannot_create_datasource,Viewer,create_datasource,403
+viewer_cannot_read_server_stats,Viewer,server_stats,403
+editor_can_view_dashboard,Editor,view_dashboard,200
+editor_can_create_dashboard,Editor,create_dashboard,200
+editor_cannot_create_datasource,Editor,create_datasource,403
+editor_cannot_read_server_stats,Editor,server_stats,403
+admin_can_view_dashboard,Admin,view_dashboard,200
+admin_can_create_dashboard,Admin,create_dashboard,200
+admin_can_create_datasource,Admin,create_datasource,200
+admin_cannot_read_server_stats,Admin,server_stats,403

@@ -12,7 +12,7 @@ def main() -> int:
     print(f"provider={s.ai_provider}  model={s.ai_model or '-'}  url={s.ai_base_url or '-'}")
     client = get_llm_client(s)
     if client is None:
-        print("No client: AI_PROVIDER is 'none' or credentials are missing (github needs GITHUB_TOKEN).")
+        print("No client: AI_PROVIDER is 'none' or credentials are missing (custom needs AI_BASE_URL and AI_MODEL; anthropic needs ANTHROPIC_API_KEY).")
         return 1
     try:
         print("reply:", client.complete("You are a connectivity test.", "Reply with the single word OK.", 20).strip())

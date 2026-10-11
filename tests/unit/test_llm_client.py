@@ -30,7 +30,7 @@ def test_provider_none_makes_no_client_so_nothing_can_be_billed():
 
 
 def test_hosted_providers_need_credentials():
-    assert llm.get_llm_client(_settings(ai_provider="github", ai_api_key=None)) is None
+    assert llm.get_llm_client(_settings(ai_provider="anthropic", ai_api_key=None)) is None
 
 
 def test_ollama_needs_no_key():
@@ -46,11 +46,11 @@ def test_openai_compatible_text_and_tool_call_parsing(monkeypatch):
     ])
     sent = []
     monkeypatch.setattr(llm.requests, "post", lambda url, **kw: (sent.append((url, kw)), next(replies))[1])
-    client = llm.get_llm_client(_settings(ai_provider="github", ai_api_key="t", ai_model="m",
-                                          ai_base_url="https://models.github.ai/inference"))
+    client = llm.get_llm_client(_settings(ai_provider="custom", ai_api_key="t", ai_model="m",
+                                          ai_base_url="https://example.test/v1"))
 
     assert client.complete("sys", "hi") == "hello"
-    assert sent[0][0] == "https://models.github.ai/inference/chat/completions"
+    assert sent[0][0] == "https://example.test/v1/chat/completions"
     assert sent[0][1]["headers"]["Authorization"] == "Bearer t"
 
     messages = [{"role": "user", "content": "go"}]
@@ -73,7 +73,7 @@ def test_call_budget_stops_runaway_usage(monkeypatch):
 
 def test_http_errors_surface_clearly(monkeypatch):
     monkeypatch.setattr(llm.requests, "post", lambda *a, **k: FakeResponse({"error": "rate limited"}, status=429))
-    client = llm.get_llm_client(_settings(ai_provider="github", ai_api_key="t", ai_base_url="http://x"))
+    client = llm.get_llm_client(_settings(ai_provider="custom", ai_api_key="t", ai_model="m", ai_base_url="http://x"))
     with pytest.raises(RuntimeError, match="429"):
         client.complete("s", "p")
 
@@ -86,14 +86,22 @@ def test_unreadable_reply_is_reported_with_diagnostics(monkeypatch):
             raise ValueError("not json")
 
     monkeypatch.setattr(llm.requests, "post", lambda *a, **k: Garbage())
-    client = llm.get_llm_client(_settings(ai_provider="github", ai_api_key="t", ai_base_url="http://x"))
+    client = llm.get_llm_client(_settings(ai_provider="custom", ai_api_key="t", ai_model="m", ai_base_url="http://x"))
     with pytest.raises(llm.LLMUnavailable, match="text/html"):
         client.complete("s", "p")
 
 
-def test_github_requests_carry_the_documented_headers(monkeypatch):
-    sent = {}
-    monkeypatch.setattr(llm.requests, "post",
-                        lambda url, **kw: (sent.update(kw), FakeResponse({"choices": [{"message": {"content": "x"}}]}))[1])
-    llm.get_llm_client(_settings(ai_provider="github", ai_api_key="t", ai_base_url="http://x")).complete("s", "p")
-    assert sent["headers"]["X-GitHub-Api-Version"] == "2022-11-28"
+def test_custom_provider_needs_endpoint_and_model():
+    assert llm.get_llm_client(_settings(ai_provider="custom", ai_base_url="", ai_model="m")) is None
+    assert llm.get_llm_client(_settings(ai_provider="custom", ai_base_url="http://x", ai_model="")) is None
+
+
+def test_retired_github_provider_is_rejected_with_a_clear_message(monkeypatch):
+    monkeypatch.setenv("AI_PROVIDER", "github")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="retired"):
+            get_settings()
+    finally:
+        monkeypatch.undo()
+        get_settings.cache_clear()

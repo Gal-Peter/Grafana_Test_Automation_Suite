@@ -77,3 +77,27 @@ def testdata_datasource(grafana_api, tracker):
     ds = grafana_api.create_testdata_datasource(unique_name("auto-testdata"))
     tracker.register(grafana_api.delete_datasource, ds["uid"])
     return ds
+
+
+@dataclass
+class TestUser:
+    __test__ = False  # not a pytest class
+    id: int
+    login: str
+    password: str
+    role: str
+    client: GrafanaClient
+
+
+@pytest.fixture
+def user_factory(grafana_api, tracker):
+    """Create a throw-away user with a given org role; deleted automatically after the test."""
+    def _create(role: str) -> TestUser:
+        login = unique_name(f"auto-{role.lower()}")
+        password = unique_name("Pw")
+        created = grafana_api.create_user(login, password)
+        tracker.register(grafana_api.delete_user, created["id"])
+        grafana_api.set_org_role(created["id"], role)
+        return TestUser(created["id"], login, password, role, grafana_api.as_user(login, password))
+
+    return _create

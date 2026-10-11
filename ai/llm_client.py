@@ -1,8 +1,9 @@
 """Provider-agnostic LLM layer (Adapter pattern).
 
   none       - default: NO network calls, nothing can be billed
-  github     - GitHub Models, free rate-limited tier (OpenAI-compatible API; GITHUB_TOKEN works inside Actions)
   ollama     - local models on your own machine, free
+  custom     - any OpenAI-compatible endpoint you configure (AI_BASE_URL, AI_MODEL, optional AI_API_KEY);
+               check that provider's own pricing, it may bill you
   anthropic  - Claude API, PAID (pay-as-you-go) - only used if you explicitly choose it
 
 A per-process call budget (AI_MAX_CALLS, default 10) guards against runaway usage on any provider.
@@ -74,7 +75,7 @@ class BaseLLM:
 
 
 class OpenAICompatLLM(BaseLLM):
-    """Works for GitHub Models, Ollama and any other OpenAI-compatible /chat/completions endpoint."""
+    """Works for Ollama and any other OpenAI-compatible /chat/completions endpoint."""
 
     def __init__(self, settings: Settings, name: str):
         super().__init__(settings)
@@ -90,8 +91,6 @@ class OpenAICompatLLM(BaseLLM):
             payload["tools"] = [{"type": "function", "function": {"name": t["name"], "description": t["description"],
                                                                    "parameters": t["input_schema"]}} for t in tools]
         headers = {"Content-Type": "application/json", "Accept": "application/json"}
-        if self.name == "github":  # headers GitHub documents for the Models inference REST endpoint
-            headers.update({"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"})
         if self._key:
             headers["Authorization"] = f"Bearer {self._key}"
         try:
@@ -166,10 +165,10 @@ def get_llm_client(settings: Settings) -> BaseLLM | None:
         return None
     if provider == "ollama":
         return OpenAICompatLLM(settings, "ollama")
+    if provider == "custom":
+        return OpenAICompatLLM(settings, "custom") if settings.ai_base_url and settings.ai_model else None
     if not settings.ai_api_key:
         return None
-    if provider == "github":
-        return OpenAICompatLLM(settings, "github")
     if provider == "anthropic":
         return AnthropicLLM(settings)
     return None

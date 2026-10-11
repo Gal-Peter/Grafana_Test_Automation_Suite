@@ -1,5 +1,6 @@
 import allure
 import pytest
+from selenium.webdriver.support.ui import WebDriverWait
 
 from utils.data_loader import load_cases
 
@@ -14,7 +15,7 @@ class TestMobileLogin:
     def test_valid_login(self, mobile_login_screen, settings):
         screen = mobile_login_screen.open().login(settings.username, settings.password)
         screen.dismiss_password_prompt()
-        screen._wait.until(lambda d: "/login" not in d.current_url)
+        WebDriverWait(screen.driver, 30).until(lambda d: "/login" not in d.current_url)
         assert "/login" not in screen.driver.current_url
 
     @pytest.mark.regression

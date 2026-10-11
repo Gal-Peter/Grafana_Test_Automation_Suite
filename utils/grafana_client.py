@@ -69,11 +69,36 @@ class GrafanaClient:
     def search(self, query: str = "", **params) -> list[dict]:
         return self._ok(self.request("GET", "/api/search", params={"query": query, **params}), "search")
 
+    def get_folder(self, uid: str) -> requests.Response:
+        return self.request("GET", f"/api/folders/{uid}")
+
+    def rename_folder(self, uid: str, title: str, version: int) -> dict:
+        body = {"title": title, "version": version, "overwrite": True}
+        return self._ok(self.request("PUT", f"/api/folders/{uid}", json=body), "rename folder")
+
+    # -- users & roles (admin API) -----------------------------------------
+    def create_user(self, login: str, password: str) -> dict:
+        body = {"name": login, "email": f"{login}@example.com", "login": login, "password": password}
+        return self._ok(self.request("POST", "/api/admin/users", json=body), "create user")
+
+    def set_org_role(self, user_id: int, role: str) -> None:
+        self._ok(self.request("PATCH", f"/api/org/users/{user_id}", json={"role": role}), f"set role {role}")
+
+    def delete_user(self, user_id: int) -> None:
+        self.request("DELETE", f"/api/admin/users/{user_id}")
+
+    def as_user(self, login: str, password: str) -> "GrafanaClient":
+        """A second client that authenticates as another user (to test what that role may do)."""
+        return GrafanaClient(self.base_url, login, password, self.testdata_type, self._timeout)
+
     # -- data sources ----------------------------------------------------
     def create_testdata_datasource(self, name: str) -> dict:
         body = {"name": name, "type": self.testdata_type, "access": "proxy"}
         result = self._ok(self.request("POST", "/api/datasources", json=body), "create datasource")
         return result["datasource"]
+
+    def get_datasource(self, uid: str) -> requests.Response:
+        return self.request("GET", f"/api/datasources/uid/{uid}")
 
     def delete_datasource(self, uid: str) -> None:
         self.request("DELETE", f"/api/datasources/uid/{uid}")

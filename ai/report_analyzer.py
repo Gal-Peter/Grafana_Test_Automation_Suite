@@ -220,7 +220,7 @@ def ai_enrich(summary: dict, base: dict, settings: Settings) -> dict:
     """Merge Claude's analysis over the rule-based one; never raises."""
     client = get_llm_client(settings)
     if client is None:
-        base["note"] = ("Rule-based analysis (AI provider is 'none'; set AI_PROVIDER=github, ollama or anthropic)."
+        base["note"] = ("Rule-based analysis (AI provider is 'none'; set AI_PROVIDER=ollama, custom or anthropic)."
                         if settings.ai_provider == "none"
                         else f"Rule-based analysis (provider '{settings.ai_provider}' has no credentials).")
         return base

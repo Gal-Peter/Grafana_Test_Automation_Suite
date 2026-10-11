@@ -14,14 +14,18 @@ on:
 
 permissions:
   contents: read
-  models: read                   # lets GITHUB_TOKEN call GitHub Models (free tier) for the AI analysis
 
 concurrency:
   group: grafana-tests-${{ github.ref }}
   cancel-in-progress: true
 
+# AI is OFF unless you set repository variables (Settings > Secrets and variables > Actions > Variables):
+#   AI_PROVIDER = custom | anthropic   (+ AI_BASE_URL and AI_MODEL for custom; secret AI_API_KEY if the service needs one)
+# "ollama" only works on your own machine. GitHub Models was retired on 30 July 2026.
 env:
-  AI_PROVIDER: github            # free tier. Set to "none" to disable AI completely.
+  AI_PROVIDER: ${{ vars.AI_PROVIDER || 'none' }}
+  AI_BASE_URL: ${{ vars.AI_BASE_URL }}
+  AI_MODEL: ${{ vars.AI_MODEL }}
   AI_MAX_CALLS: "10"
 
 jobs:
@@ -56,14 +60,14 @@ jobs:
       - name: Run tests in the container
         env:
           PYTEST_BASE_ARGS: ${{ inputs.pytest_args || '-m "not mobile and not ai"' }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # AI triage of failures on ONE browser only, to stay inside the free rate limits
-          AI_FAILURE_ANALYSIS: ${{ matrix.browser == 'chromium' && 'true' || 'false' }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          # AI triage of failures on ONE browser only, and only when an AI provider is configured
+          AI_FAILURE_ANALYSIS: ${{ matrix.browser == 'chromium' && vars.AI_PROVIDER != '' && vars.AI_PROVIDER != 'none' && 'true' || 'false' }}
         run: |
           mkdir -p allure-results logs traces videos
           docker run --rm --network host \
             -e BASE_URL=http://localhost:3000 \
-            -e AI_PROVIDER -e AI_MAX_CALLS -e AI_FAILURE_ANALYSIS -e GITHUB_TOKEN \
+            -e AI_PROVIDER -e AI_BASE_URL -e AI_MODEL -e AI_MAX_CALLS -e AI_FAILURE_ANALYSIS -e AI_API_KEY \
             -e "PYTEST_ARGS=$PYTEST_BASE_ARGS --browser ${{ matrix.browser }}" \
             -v "$PWD/allure-results:/app/allure-results" \
             -v "$PWD/logs:/app/logs" \
@@ -86,8 +90,9 @@ jobs:
 
   ai-tests:
     name: AI exploratory tests
-    if: github.event_name != 'pull_request'     # fork PRs get a restricted token
-    continue-on-error: true                     # free-tier AI is best-effort: never fail the pipeline
+    # Runs only when you configured an AI provider (see the env comment above); skipped otherwise.
+    if: github.event_name != 'pull_request' && vars.AI_PROVIDER != '' && vars.AI_PROVIDER != 'none'
+    continue-on-error: true                     # AI is best-effort: a provider outage must never fail the pipeline
     runs-on: ubuntu-latest
     timeout-minutes: 20
     services:
@@ -107,29 +112,14 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Wait for Grafana
         run: curl --retry 40 --retry-delay 3 --retry-connrefused -fsS http://localhost:3000/api/health
-      - name: Diagnose AI endpoint (prints status and headers; the token is never printed)
-        continue-on-error: true
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          curl -sS -i -m 60 -X POST https://models.github.ai/inference/chat/completions \
-            -H "Authorization: Bearer $GITHUB_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            -H "X-GitHub-Api-Version: 2022-11-28" \
-            -H "Content-Type: application/json" \
-            -d '{"model":"openai/gpt-4.1-mini","messages":[{"role":"user","content":"Reply with the word OK"}],"max_tokens":10}' \
-            | head -c 2000
-          echo
-          echo "--- model catalog (first ids) ---"
-          curl -sS -m 60 https://models.github.ai/catalog/models -H "Authorization: Bearer $GITHUB_TOKEN" | head -c 600
       - name: Run AI tests in the container
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
         run: |
           mkdir -p allure-results logs traces videos
           docker run --rm --network host \
             -e BASE_URL=http://localhost:3000 \
-            -e AI_PROVIDER -e AI_MAX_CALLS -e GITHUB_TOKEN \
+            -e AI_PROVIDER -e AI_BASE_URL -e AI_MODEL -e AI_MAX_CALLS -e AI_API_KEY \
             -e "PYTEST_ARGS=-m ai --browser chromium" \
             -v "$PWD/allure-results:/app/allure-results" \
             -v "$PWD/logs:/app/logs" \
@@ -159,7 +149,7 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install requests python-dotenv
+      - run: pip install requests python-dotenv anthropic
       - uses: actions/download-artifact@v4
         with:
           pattern: results-*
@@ -171,7 +161,7 @@ jobs:
           find merged -maxdepth 2 | head -30
       - name: Generate AI report from all browsers
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
         run: |
           python -m ai.generate_report --results merged/allure-results --output ai_report.html
           ls -la ai_report.html

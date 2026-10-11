@@ -10,10 +10,9 @@
 x-test-env: &test-env
   BASE_URL: http://grafana:3000
   GRAFANA_WAIT_SECONDS: "120"          # Grafana needs a moment to boot; the suite polls /api/health
-  AI_PROVIDER: ${AI_PROVIDER:-none}          # none = no AI calls, no cost. Free options: github | ollama
+  AI_PROVIDER: ${AI_PROVIDER:-none}          # none = no AI calls, no cost. Free option: ollama (runs on your PC)
   AI_MODEL: ${AI_MODEL:-}
   AI_BASE_URL: ${AI_BASE_URL:-}
-  GITHUB_TOKEN: ${GITHUB_TOKEN:-}            # for AI_PROVIDER=github (token with the Models permission)
   ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}  # PAID provider; leave empty to stay free
   AI_FAILURE_ANALYSIS: ${AI_FAILURE_ANALYSIS:-false}
 

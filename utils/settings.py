@@ -1,7 +1,7 @@
 """Central configuration (Singleton via lru_cache).
 
 Precedence: environment variable  >  config.json  >  built-in default.
-Secrets (GITHUB_TOKEN, ANTHROPIC_API_KEY, AI_API_KEY) are read from the environment / .env only, never from config.json.
+Secrets (ANTHROPIC_API_KEY, AI_API_KEY) are read from the environment / .env only, never from config.json.
 """
 from __future__ import annotations
 
@@ -90,23 +90,21 @@ class Settings:
     mobile_base_url: str
 
 
-AI_PROVIDERS = {"none", "github", "ollama", "anthropic"}
-AI_DEFAULT_MODEL = {"none": "", "github": "openai/gpt-4.1-mini", "ollama": "llama3.1:8b", "anthropic": "claude-sonnet-5-5"}
+AI_PROVIDERS = {"none", "ollama", "custom", "anthropic"}
+AI_DEFAULT_MODEL = {"none": "", "ollama": "llama3.1:8b", "custom": "", "anthropic": "claude-sonnet-5-5"}
 
 
 def _ai_api_key(provider: str) -> str | None:
     explicit = os.getenv("AI_API_KEY")
     if explicit:
         return explicit
-    env_name = {"github": ("GITHUB_TOKEN", "GH_MODELS_TOKEN"), "anthropic": ("ANTHROPIC_API_KEY",)}.get(provider, ())
+    env_name = {"anthropic": ("ANTHROPIC_API_KEY",)}.get(provider, ())
     return next((os.getenv(n) for n in env_name if os.getenv(n)), None)
 
 
 def _ai_base_url(provider: str, configured: str) -> str:
     if configured:
         return configured.rstrip("/")
-    if provider == "github":
-        return "https://models.github.ai/inference"
     if provider == "ollama":  # inside Docker, "localhost" is the container itself
         host = "host.docker.internal" if Path("/.dockerenv").exists() else "localhost"
         return f"http://{host}:11434/v1"
@@ -117,6 +115,9 @@ def _ai_base_url(provider: str, configured: str) -> str:
 def get_settings() -> Settings:
     c = _load_json()
     ai_provider = str(_val(c, "AI_PROVIDER", "ai", "provider", "none")).strip().lower()
+    if ai_provider == "github":
+        raise ValueError("AI_PROVIDER=github is no longer supported: GitHub Models was retired on 30 July 2026. "
+                         "Use none (default), ollama (free, local), custom or anthropic (paid).")
     if ai_provider not in AI_PROVIDERS:
         raise ValueError(f"AI_PROVIDER must be one of {sorted(AI_PROVIDERS)}, got '{ai_provider}'")
     platform = str(_val(c, "MOBILE_PLATFORM", "mobile", "platform", "android")).lower()

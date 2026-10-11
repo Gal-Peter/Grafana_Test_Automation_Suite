@@ -23,12 +23,21 @@ class LoginScreen(BaseScreen):
         field.send_keys(Keys.ENTER)  # Enter avoids the on-screen keyboard covering the button
         return self
 
-    @step("Skip the 'Update your password' prompt if Grafana shows it")
-    def dismiss_password_prompt(self, wait_s: int = 5):
+    @step("Finish login (skip the 'Update your password' prompt if Grafana shows it)")
+    def dismiss_password_prompt(self, wait_s: int = 45):
+        """After submitting, Grafana either leaves /login or shows a Skip button on the same URL.
+        The emulator is slow, so wait for whichever happens first instead of a short fixed wait."""
+        def done_or_prompt(driver):
+            if "/login" not in driver.current_url:
+                return "done"
+            buttons = driver.find_elements(By.XPATH, "//button[normalize-space()='Skip']")
+            return buttons[0] if buttons else False
+
         try:
-            button = WebDriverWait(self.driver, wait_s).until(
-                EC.element_to_be_clickable((By.XPATH, "//button[normalize-space()='Skip']")))
+            outcome = WebDriverWait(self.driver, wait_s).until(done_or_prompt)
         except Exception:
-            return self  # no prompt
-        button.click()
+            return self  # neither happened; the caller's assertion will report it
+        if outcome != "done":
+            # JS click: the on-screen keyboard or viewport can cover the button
+            self.driver.execute_script("arguments[0].scrollIntoView({block:'center'}); arguments[0].click();", outcome)
         return self
