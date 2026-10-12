@@ -114,6 +114,11 @@ class GrafanaClient:
     def team_members(self, team_id: int) -> list[dict]:
         return self._ok(self.request("GET", f"/api/teams/{team_id}/members"), "list team members")
 
+    def set_folder_team_permission(self, folder_uid: str, team_id: int, permission: str) -> None:
+        """permission: 'View' | 'Edit' | 'Admin'. An empty string removes the team's permission."""
+        self._ok(self.request("POST", f"/api/access-control/folders/{folder_uid}/teams/{team_id}",
+                              json={"permission": permission}), f"set folder permission {permission or 'none'}")
+
     # -- data sources ----------------------------------------------------
     def create_testdata_datasource(self, name: str) -> dict:
         body = {"name": name, "type": self.testdata_type, "access": "proxy"}
