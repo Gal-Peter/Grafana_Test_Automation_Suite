@@ -101,3 +101,15 @@ def user_factory(grafana_api, tracker):
         return TestUser(created["id"], login, password, role, grafana_api.as_user(login, password))
 
     return _create
+
+
+@pytest.fixture
+def team_factory(grafana_api, tracker):
+    """Create a throw-away team; deleted automatically after the test."""
+    def _create(prefix: str = "auto-team") -> dict:
+        name = unique_name(prefix)
+        team = grafana_api.create_team(name)
+        tracker.register(grafana_api.delete_team, team["teamId"])
+        return {"id": team["teamId"], "name": name}
+
+    return _create

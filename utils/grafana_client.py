@@ -91,6 +91,29 @@ class GrafanaClient:
         """A second client that authenticates as another user (to test what that role may do)."""
         return GrafanaClient(self.base_url, login, password, self.testdata_type, self._timeout)
 
+    # -- teams -------------------------------------------------------------
+    def create_team(self, name: str) -> dict:
+        return self._ok(self.request("POST", "/api/teams", json={"name": name, "email": f"{name}@example.com"}),
+                        "create team")
+
+    def get_team(self, team_id: int) -> requests.Response:
+        return self.request("GET", f"/api/teams/{team_id}")
+
+    def delete_team(self, team_id: int) -> None:
+        self.request("DELETE", f"/api/teams/{team_id}")
+
+    def search_teams(self, name: str) -> list[dict]:
+        return self._ok(self.request("GET", "/api/teams/search", params={"name": name}), "search teams")["teams"]
+
+    def add_team_member(self, team_id: int, user_id: int) -> None:
+        self._ok(self.request("POST", f"/api/teams/{team_id}/members", json={"userId": user_id}), "add team member")
+
+    def remove_team_member(self, team_id: int, user_id: int) -> None:
+        self._ok(self.request("DELETE", f"/api/teams/{team_id}/members/{user_id}"), "remove team member")
+
+    def team_members(self, team_id: int) -> list[dict]:
+        return self._ok(self.request("GET", f"/api/teams/{team_id}/members"), "list team members")
+
     # -- data sources ----------------------------------------------------
     def create_testdata_datasource(self, name: str) -> dict:
         body = {"name": name, "type": self.testdata_type, "access": "proxy"}
