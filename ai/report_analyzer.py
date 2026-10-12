@@ -187,7 +187,7 @@ def heuristic_analysis(summary: dict) -> dict:
     if counts["skipped"]:
         add("Coverage", f"{counts['skipped']} test(s) were skipped (for example no Appium server). Make sure that is intentional.", "low")
     if failed == 0 and total:
-        add("Coverage", "Everything passed: widen coverage with user/permission tests and dashboard create-edit-delete flows.", "low")
+        add("Coverage", "Everything passed: next, add UI tests for dashboard create-edit-delete flows and for sharing content with teams.", "low")
     add("Trending", "Archive allure-results per scheduled run so pass rate and duration can be compared over time.", "low")
 
     failure_analysis = []
