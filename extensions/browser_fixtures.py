@@ -8,6 +8,8 @@ import pytest
 from playwright.sync_api import expect
 
 from ai.failure_analyzer import analyze_failure
+from page_objects.alert_rule_page import AlertRulePage
+from page_objects.dashboard_editor_page import DashboardEditorPage
 from page_objects.dashboard_page import DashboardPage
 from page_objects.dashboards_browse_page import DashboardsBrowsePage
 from page_objects.datasources_page import DataSourcesPage
@@ -138,6 +140,11 @@ def dashboard_page(page) -> DashboardPage:
 
 
 @pytest.fixture
+def dashboard_editor_page(page) -> DashboardEditorPage:
+    return DashboardEditorPage(page)
+
+
+@pytest.fixture
 def dashboards_browse_page(page) -> DashboardsBrowsePage:
     return DashboardsBrowsePage(page)
 
@@ -150,3 +157,8 @@ def datasources_page(page) -> DataSourcesPage:
 @pytest.fixture
 def explore_page(page) -> ExplorePage:
     return ExplorePage(page)
+
+
+@pytest.fixture
+def alert_rule_page(page) -> AlertRulePage:
+    return AlertRulePage(page)

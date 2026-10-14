@@ -119,6 +119,14 @@ class GrafanaClient:
         self._ok(self.request("POST", f"/api/access-control/folders/{folder_uid}/teams/{team_id}",
                               json={"permission": permission}), f"set folder permission {permission or 'none'}")
 
+    def find_dashboard_uids(self, title: str) -> list[str]:
+        return [h["uid"] for h in self.search(title, type="dash-db") if h["title"] == title]
+
+    def delete_dashboards_titled(self, title: str) -> None:
+        """Cleanup for dashboards created through the UI, where the test only knows the title."""
+        for uid in self.find_dashboard_uids(title):
+            self.delete_dashboard(uid)
+
     # -- data sources ----------------------------------------------------
     def create_testdata_datasource(self, name: str) -> dict:
         body = {"name": name, "type": self.testdata_type, "access": "proxy"}
@@ -130,3 +138,13 @@ class GrafanaClient:
 
     def delete_datasource(self, uid: str) -> None:
         self.request("DELETE", f"/api/datasources/uid/{uid}")
+
+    # -- alerting ----------------------------------------------------------
+    def find_alert_rules(self, title: str) -> list[dict]:
+        resp = self.request("GET", "/api/v1/provisioning/alert-rules")
+        return [r for r in resp.json() if r.get("title") == title] if resp.ok else []
+
+    def delete_alert_rules_titled(self, title: str) -> None:
+        """Cleanup for rules created through the UI, where the test only knows the title."""
+        for rule in self.find_alert_rules(title):
+            self.request("DELETE", f"/api/v1/provisioning/alert-rules/{rule['uid']}")
