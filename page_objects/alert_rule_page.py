@@ -24,8 +24,11 @@ class AlertRulePage(BasePage):
         return self
 
     @step("Fill in the rule: {name}, threshold {threshold}")
-    def fill_rule(self, name: str, threshold: int, folder: str, group: str, contact_point: str, summary: str):
+    def fill_rule(self, name: str, threshold: int, folder: str, group: str, contact_point: str, summary: str,
+                  datasource: str | None = None):
         self._tid("data-testid alert-rule name-field").fill(name)
+        if datasource:
+            self._choose_datasource(datasource)
         self._tid("data-testid alert-rule threshold-input").fill(str(threshold))
 
         self._click(self._tid("data-testid folder-picker-trigger-button"), "the folder picker")
@@ -42,6 +45,12 @@ class AlertRulePage(BasePage):
 
         self._tid("annotation-value-0").fill(summary)
         return self
+
+    def _choose_datasource(self, name: str):
+        """A fresh Grafana (CI, Docker) has no default data source, so the query needs one picked explicitly."""
+        self._click(self._tid("data-testid Data source picker select container"), "the query data source picker")
+        option = self.page.get_by_role("option", name=name).or_(self.page.get_by_text(name, exact=True)).first
+        self._click(option, f"data source '{name}' in the picker")
 
     @step("Save the rule")
     def save(self):

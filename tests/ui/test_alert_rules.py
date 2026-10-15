@@ -35,13 +35,15 @@ def contact_point(grafana_api, tracker) -> str:
 class TestAlertRulesInUi:
     @pytest.mark.smoke
     @allure.title("An alert rule created in the UI is saved with the chosen settings")
-    def test_create_rule(self, grafana_api, automation_folder, tracker, contact_point, alert_rule_page):
+    def test_create_rule(self, grafana_api, automation_folder, testdata_datasource, tracker, contact_point,
+                         alert_rule_page):
         title = unique_name("AUTOMATION-ui-rule")
         group = unique_name("auto-group")
         tracker.register(grafana_api.delete_alert_rules_titled, title)  # runs even if the test fails half-way
 
         alert_rule_page.open_new_from_ui()
-        alert_rule_page.fill_rule(title, 20, automation_folder["title"], group, contact_point, "created by automation")
+        alert_rule_page.fill_rule(title, 20, automation_folder["title"], group, contact_point, "created by automation",
+                                  datasource=testdata_datasource["name"])
         alert_rule_page.save()
 
         rules = _wait_for_rule(grafana_api, title)
