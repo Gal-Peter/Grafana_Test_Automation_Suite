@@ -17,6 +17,12 @@ def _wait_for_title(api, uid: str, title: str, timeout_s: int = 15) -> dict:
         time.sleep(0.5)
 
 
+def _version_count(api, uid: str) -> int:
+    """History entries: more reliable than the 'version' field, which Grafana 13 can report differently per setup."""
+    data = api.request("GET", f"/api/dashboards/uid/{uid}/versions").json()
+    return len(data.get("versions", data) if isinstance(data, dict) else data)
+
+
 def _panel_titles(dashboard: dict) -> list[str]:
     """Panels can sit at the top level or inside rows/groups depending on the layout."""
     titles = []
@@ -33,7 +39,7 @@ class TestDashboardEditInUi:
     @allure.title("An existing dashboard can be renamed, get a new panel and be saved")
     def test_rename_and_add_panel(self, grafana_api, dashboard_factory, dashboard_page, dashboard_editor_page):
         dash = dashboard_factory()
-        version_before = grafana_api.get_dashboard(dash.uid).json()["dashboard"]["version"]
+        versions_before = _version_count(grafana_api, dash.uid)
         new_title, new_panel = unique_name("AUTOMATION-renamed-ui"), unique_name("panel")
 
         dashboard_page.open_by_uid(dash.uid)
@@ -45,7 +51,9 @@ class TestDashboardEditInUi:
         stored = _wait_for_title(grafana_api, dash.uid, new_title)
         assert stored["title"] == new_title, "The new title was not saved"
         assert new_panel in _panel_titles(stored), f"Panel '{new_panel}' not in saved dashboard: {_panel_titles(stored)}"
-        assert stored["version"] > version_before
+        versions_after = _version_count(grafana_api, dash.uid)
+        assert versions_after > versions_before, \
+            f"Saving did not add a version ({versions_before} -> {versions_after}); stored version: {stored.get('version')}"
 
         dashboard_page.open_by_uid(dash.uid)
         expect(dashboard_page.title_breadcrumb(new_title)).to_be_visible()
