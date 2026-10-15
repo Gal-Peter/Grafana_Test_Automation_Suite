@@ -11,6 +11,8 @@ from ai.failure_analyzer import analyze_failure
 from page_objects.alert_rule_page import AlertRulePage
 from page_objects.dashboard_editor_page import DashboardEditorPage
 from page_objects.dashboard_page import DashboardPage
+from page_objects.folders_page import FoldersPage
+from page_objects.import_page import ImportPage
 from page_objects.dashboards_browse_page import DashboardsBrowsePage
 from page_objects.datasources_page import DataSourcesPage
 from page_objects.explore_page import ExplorePage
@@ -162,3 +164,13 @@ def explore_page(page) -> ExplorePage:
 @pytest.fixture
 def alert_rule_page(page) -> AlertRulePage:
     return AlertRulePage(page)
+
+
+@pytest.fixture
+def folders_page(page) -> FoldersPage:
+    return FoldersPage(page)
+
+
+@pytest.fixture
+def import_page(page) -> ImportPage:
+    return ImportPage(page)

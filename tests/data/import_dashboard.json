@@ -1,0 +1,17 @@
+{
+  "uid": "auto-import-sample",
+  "title": "AUTOMATION-import-sample",
+  "tags": ["automation", "import"],
+  "schemaVersion": 39,
+  "version": 1,
+  "time": {"from": "now-6h", "to": "now"},
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Imported panel",
+      "gridPos": {"h": 6, "w": 8, "x": 0, "y": 0},
+      "targets": [{"refId": "A"}]
+    }
+  ]
+}
